@@ -20,7 +20,15 @@ class Bundle {
 	}
 
 	public function _on_portal_route($path, $dir) {
-		$this->route($path, array($dir));
+		if(strpos($_SERVER['HTTP_USER_AGENT'], 'TwilioProxy') === 0) {
+			$post = e::$resource->post;
+			if(isset($post['CallStatus']))
+				$this->type = 'phone';
+			else if(isset($post['SmsStatus']))
+				$this->type = 'sms';
+
+			$this->route($path, array($dir));
+		}
 	}
 
 	public function _on_portal_exception($path, $dir, $exception) {
