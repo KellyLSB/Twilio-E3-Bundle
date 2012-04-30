@@ -6,9 +6,8 @@ use e;
 
 class Bundle {
 
-	public $type;
-
-	private static $url_vars;
+	private $type;
+	private $cache;
 
 	public function _on_framework_loaded() {
 		$twilio_settings = array(
@@ -20,15 +19,57 @@ class Bundle {
 	}
 
 	public function _on_portal_route($path, $dir) {
-		if(strpos($_SERVER['HTTP_USER_AGENT'], 'TwilioProxy') === 0) {
+		//if(strpos($_SERVER['HTTP_USER_AGENT'], 'TwilioProxy') === 0) {
+			/**
+			 * Determine if were handling a call or a sms
+			 */
 			$post = e::$resource->post;
 			if(isset($post['CallStatus']))
 				$this->type = 'phone';
 			else if(isset($post['SmsStatus']))
 				$this->type = 'sms';
 
+			/**
+			 * Check if the cache directory exists and is writable
+			 */
+			if(!is_dir($cacheDir = __DIR__.'/cache'))
+				throw new Exception('Twilio: The directory '.$dir.' does not exist.');
+			if(!is_writable($cacheDir))
+				throw new Exception('Twilio: The directory '.$dir.' is not writable.');
+
+			/**
+			 * Get the cache filename
+			 */
+			$cacheFile = $cacheDir.'/'.preg_replace("/\D/", "", $post['From']).'_'.substr(md5($_SERVER['HTTP_HOST']), 0, 6).'.twl';
+
+			/**
+			 * Load cache is it already exists
+			 */
+			if(is_file($cacheFile) && filemtime($cacheFile) > (time() - 3600))
+				$this->cache = unserialize(e::$encryption->decrypt(file_get_contents($cacheFile), $post['From']));
+			else $this->cache = array();
+
+			if(!empty($this->cache))
+				dump($this->cache);
+
+			/**
+			 * Save all posted data to the cache
+			 */
+			if(empty($this->cache))
+				$this->cache = $post;
+			else $this->cache = e\array_merge_recursive_simple($this->cache, $post);
+			file_put_contents($cacheFile, e::$encryption->encrypt(serialize($this->cache)), $post['From']);
+
+			/**
+			 * Start routing the request
+			 */
 			$this->route($path, array($dir));
-		}
+
+			/**
+			 * If we didnt complete since we know we are twilio throw an exception
+			 */
+			throw new Exception('The page Twilio requested did not exist.');
+		//}
 	}
 
 	public function _on_portal_exception($path, $dir, $exception) {
@@ -40,111 +81,84 @@ class Bundle {
 	}
 
 	public function exception($path, $dirs, $exception) {
+
+		/**
+		 * Determine if were dealing with phone or sms
+		 */
 		if($this->type)
 			$type = $this->type;
 		else $type = 'phone';
 
+		/**
+		 * If its a phone speak the notification else SMS it
+		 */
 		if($type == 'phone')
 			$ret = 'Say';
 		else if($type == 'sms') 
 			$ret = 'Sms';
 
+		/**
+		 * Output the error
+		 */
+		header('Content-Type: application/xml; charset=utf-8');
 		echo "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>";
 		echo "<Response>";
-			echo "<$ret>A server error was encountered. Support has been notified. Please try again later. Thank You, Good Bye.</$ret>";
+		echo "<$ret>A server error was encountered. Support has been notified. Please try again later. Thank You, Good Bye.</$ret>";
 		echo "</Response>";
+		e\Disable_Trace();
 		e\Complete();
 	}
 	
 	public function route($path, $dirs = null) {
 		
-		// If dirs are not specified, use defaults
 		if(is_null($dirs))
 			$dirs = e::configure('twilio')->locations;
-		
-		// Make sure path contains valid controller name
+
+		/**
+		 * If were looking for the root file
+		 */
 		if(!isset($path[0]) || $path[0] == '')
 			$path = array('index');
 		
-		// Get the lhtml name
+		/**
+		 * Get the file name
+		 */
 		$name = strtolower(implode('/', $path));
 		
-		e\Trace(__CLASS__, "Looking for $name.twiml");
-		
-		// Check all dirs for a matching lhtml
+		/**
+		 * Log File
+		 */
+		e\Trace(__CLASS__, "Twilio: Looking for $name.twiml");
+
+		/**
+		 * Find the file
+		 */
 		foreach($dirs as $dir) {
-			// Look in lhtml folder
-			if(basename($dir) !== 'twiml')
-				$dir .= '/twiml';
-			
-			// Skip if missing
-			if(!is_dir($dir))
+
+			for($i=0;$i<2;$i++) {
+				if(is_file($file = $dir.'/'.$name.'.twiml'))
+					break;
+				
+				unset($file);
+				if(array_pop(explode('/', $name)) === 'index')
+					break;
+
+				$name = $name.'/index';
+			}
+
+			if(!isset($file))
 				continue;
 			
-			$matched = false;	$vars = array();	$nodir = false; $badmatch = false;
-			$p = 1;
-			foreach($path as $key => $segment) {
-	 			if($matched == 'file') $vars[] = $segment;
-	 			if((!$matched || $matched == 'dir') && is_dir("$dir/$segment")) {
-					$dir .= "/$segment";
-					$matched = 'dir';
-				}
-				elseif(is_file("$dir/$segment.twiml")) {
-					$file = "$dir/$segment.twiml";
-					$matched = 'file';
-				}
-				elseif($matched != 'file') {
-					$badmatch = true;
-				}
-			}
-			
-			if($matched != 'file' && is_file("$dir/index.twiml")) {
-				$file = "$dir/index.twiml";
-				$matched = 'index';
-			}
-
-			# no match at all, just continue
-			if($matched == false) continue;
-			
-			# set the url vars to use
-			self::$url_vars = $vars;
-
 			/**
-			 * Parse the TWIML file
-			 * @author Nate Ferrero
+			 * Be Awesome and Parse in LHTML
 			 */
-			$start = microtime(true);
-			$out = e::$lhtml->file($file)->parse(null, true)->build();
-			$end = microtime(true);
-			$time = ($end - $start) * 1000;
-
-			// Show debug time if set
-			if(isset($_GET['--twiml-time'])) {
-				
-
-				// $file $time
-				eval(d);
-			}
-
-			/**
-			 * Output the header
-			 * @author Nate Ferrero
-			 */
+			$stack = e::$lhtml->file($file)->parse();
 			header('Content-Type: application/xml; charset=utf-8');
+			echo $stack->build();
 			e\Disable_Trace();
-
-			/**
-			 * HACK
-			 * Since double quotes aren't parsed correctly (and &doesnt; work in some cases)
-			 * @author Nate Ferrero
-			 * @todo Find a better solution for this!
-			 */
-			$out = str_replace(array('-#-'), array('&quot;'), $out);
-			echo $out;
-
-			// Complete the page load
 			e\Complete();
 		}
+		
 	}
 
 }
