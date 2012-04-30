@@ -40,13 +40,13 @@ class Bundle {
 			/**
 			 * Get the cache filename
 			 */
-			$cacheFile = $cacheDir.'/'.preg_replace("/\D/", "", $post['From']).'_'.substr(md5($_SERVER['HTTP_HOST']), 0, 6).'.twl';
+			$cacheFile = $cacheDir.'/'.preg_replace("/\D/", "", $post['From']).'_'.substr(md5($_SERVER['HTTP_HOST']), 0, 6).'.	twl';
 
 			/**
 			 * Load cache is it already exists
 			 */
 			if(is_file($cacheFile) && filemtime($cacheFile) > (time() - 3600))
-				$this->cache = unserialize(e::$encryption->decrypt(file_get_contents($cacheFile), $post['From']));
+				$this->cache = unserialize(e::$encryption->decrypt(base64_decode(file_get_contents($cacheFile), $post['From'])));
 			else $this->cache = array();
 
 			if(!empty($this->cache))
@@ -58,7 +58,7 @@ class Bundle {
 			if(empty($this->cache))
 				$this->cache = $post;
 			else $this->cache = e\array_merge_recursive_simple($this->cache, $post);
-			file_put_contents($cacheFile, e::$encryption->encrypt(serialize($this->cache)), $post['From']);
+			file_put_contents($cacheFile, base64_encode(e::$encryption->encrypt(serialize($this->cache)), $post['From']));
 
 			/**
 			 * Start routing the request
