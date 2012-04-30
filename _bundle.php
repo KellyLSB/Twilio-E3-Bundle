@@ -40,7 +40,7 @@ class Bundle {
 			/**
 			 * Get the cache filename
 			 */
-			$cacheFile = $cacheDir.'/'.preg_replace("/\D/", "", $post['From']).'_'.substr(md5($_SERVER['HTTP_HOST']), 0, 6).'.	twl';
+			$cacheFile = $cacheDir.'/'.preg_replace("/\D/", "", $post['From']).'_'.substr(md5($_SERVER['HTTP_HOST']), 0, 6).'.twl';
 
 			/**
 			 * Load cache is it already exists
@@ -48,6 +48,9 @@ class Bundle {
 			if(is_file($cacheFile) && filemtime($cacheFile) > (time() - 3600))
 				$this->cache = unserialize(e::$encryption->decrypt(base64_decode(file_get_contents($cacheFile), $post['From'])));
 			else $this->cache = array();
+
+			if(!is_array($this->cache))
+				$this->cache = array();
 
 			if(!empty($this->cache))
 				dump($this->cache);
