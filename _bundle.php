@@ -33,9 +33,9 @@ class Bundle {
 			 * Check if the cache directory exists and is writable
 			 */
 			if(!is_dir($cacheDir = __DIR__.'/cache'))
-				throw new Exception('Twilio: The directory '.$dir.' does not exist.');
+				throw new Exception('Twilio: The directory '.$cacheDir.' does not exist.');
 			if(!is_writable($cacheDir))
-				throw new Exception('Twilio: The directory '.$dir.' is not writable.');
+				throw new Exception('Twilio: The directory '.$cacheDir.' is not writable.');
 
 			/**
 			 * Get the cache filename
