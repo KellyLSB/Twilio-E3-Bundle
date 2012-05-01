@@ -65,6 +65,19 @@ class Bundle {
 			file_put_contents($cacheFile, $data);
 
 			/**
+			 * Trigger an event
+			 */
+			if($this->type === 'phone')
+				e::$events->twilio_call($post['From']);
+			else if($this->type === 'sms')
+				e::$events->twilio_sms($post['From']);
+
+			/**
+			 * Set to a LHTML Hook
+			 */
+			e::configure('lhtml')->activeAddKey('hook', ':twilcache', $this->cache);
+
+			/**
 			 * Start routing the request
 			 */
 			$this->route($path, array($dir));
