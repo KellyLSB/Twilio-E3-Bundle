@@ -61,7 +61,8 @@ class Bundle {
 			if(empty($this->cache))
 				$this->cache = $post;
 			else $this->cache = e\array_merge_recursive_simple($this->cache, $post);
-			file_put_contents($cacheFile, base64_encode(e::$encryption->encrypt(serialize($this->cache), $post['From'])));
+			$data = base64_encode(e::$encryption->encrypt(serialize($this->cache), $post['From']));
+			file_put_contents($cacheFile, $data);
 
 			/**
 			 * Start routing the request
