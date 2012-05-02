@@ -73,10 +73,10 @@ class Bundle {
 			 */
 			$post = e::$resource->post;
 
-			if(!isset($post['From']))
-				;//$post['From'] = '12485222452';
+			/*if(!isset($post['From']))
+				$post['From'] = '12485222452';
 			if(!isset($post['CallStatus']) && !isset($post['SmsStatus']))
-				$post['CallStatus'] = '12485222452';
+				$post['CallStatus'] = '12485222452';*/
 
 			$this->from = $post['From'];
 			$this->to = $post['To'];
