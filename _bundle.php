@@ -169,6 +169,13 @@ class Bundle {
 		return true;
 	}
 
+	public function clearCache() {
+		if(!is_array($this->cache)) return false;
+
+		unlink($this->cacheFile);
+		return true;
+	}
+
 	public function _on_portal_route($path, $dir) {
 		try {
 			$this->twilInit();
