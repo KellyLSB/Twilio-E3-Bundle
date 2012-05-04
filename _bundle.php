@@ -192,7 +192,7 @@ class Bundle {
 		/**
 		 * If we didnt complete since we know we are twilio throw an exception
 		 */
-		throw new Exception('The page Twilio requested did not exist.');
+		//throw new Exception('The page Twilio requested did not exist.');
 	}
 
 	/*public function _on_portal_exception($path, $dir, $exception) {
