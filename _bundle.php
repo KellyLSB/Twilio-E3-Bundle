@@ -66,91 +66,89 @@ class Bundle {
 	 * Run on every twilio page
 	 */
 	public function twilInit() {
-		//if(strpos($_SERVER['HTTP_USER_AGENT'], 'TwilioProxy') === 0) {
+
+		/**
+		 * Determine if were handling a call or a sms
+		 */
+		$post = e::$resource->post;
+
+		/*if(!isset($post['From']))
+			$post['From'] = '12485222452';
+		if(!isset($post['CallStatus']) && !isset($post['SmsStatus']))
+			$post['CallStatus'] = '12485222452';*/
+
+		$this->from = $post['From'];
+		$this->to = $post['To'];
+
+		if(isset($post['CallStatus']))
+			$this->type = 'phone';
+		else if(isset($post['SmsStatus']))
+			$this->type = 'sms';
+
+		/**
+		 * Check if the cache directory exists and is writable
+		 */
+		if(!is_dir($cacheDir = __DIR__.'/cache'))
+			throw new Exception('Twilio: The directory '.$cacheDir.' does not exist.');
+		if(!is_writable($cacheDir))
+			throw new Exception('Twilio: The directory '.$cacheDir.' is not writable.');
+
+		/**
+		 * Get the cache filename
+		 */
+		$cacheFile = $cacheDir.'/'.preg_replace("/\D/", "", $post['From']).'_'.substr(md5($_SERVER['HTTP_HOST']), 0, 6).'.twl';
+
+		/**
+		 * Load cache is it already exists
+		 */
+		if(is_file($cacheFile) && filemtime($cacheFile) > (time() - 3600))
+			$this->cache = unserialize(e::$encryption->decrypt(base64_decode(file_get_contents($cacheFile)), $post['From']));
+		else $this->cache = array();
+
+		if(!is_array($this->cache))
+			$this->cache = array();
+
+		if(!empty($this->cache));
+			//dump($this->cache);
+
+		/**
+		 * Get Member
+		 */
+		if(empty($this->cache['Member'])) {
+			if($this->type === 'phone')
+				$member = array_shift(e::$events->twilio_call($post['From']));
+			else if($this->type === 'sms')
+				$member = array_shift(e::$events->twilio_sms($post['From']));
 
 			/**
-			 * Determine if were handling a call or a sms
+			 * Save member to cache
 			 */
-			$post = e::$resource->post;
+			if(isset($member) && method_exists($member, '__toArray'))
+				$this->cache['Member'] = $member->__toArray();
 
-			/*if(!isset($post['From']))
-				$post['From'] = '12485222452';
-			if(!isset($post['CallStatus']) && !isset($post['SmsStatus']))
-				$post['CallStatus'] = '12485222452';*/
+		}
 
-			$this->from = $post['From'];
-			$this->to = $post['To'];
+		/**
+		 * Save all posted data to the cache
+		 */
+		if(empty($this->cache))
+			$this->cache = $post;
+		else $this->cache = e\array_merge_recursive_simple($this->cache, $post);
+		$data = base64_encode(e::$encryption->encrypt(serialize($this->cache), $post['From']));
+		file_put_contents($cacheFile, $data);
 
-			if(isset($post['CallStatus']))
-				$this->type = 'phone';
-			else if(isset($post['SmsStatus']))
-				$this->type = 'sms';
+		/**
+		 * Set to a LHTML Hook
+		 */
+		if($member) e::configure('lhtml')->activeAddKey('hook', ':member', $member);
+		e::configure('lhtml')->activeAddKey('hook', ':twilcache', $this->cache);
 
-			/**
-			 * Check if the cache directory exists and is writable
-			 */
-			if(!is_dir($cacheDir = __DIR__.'/cache'))
-				throw new Exception('Twilio: The directory '.$cacheDir.' does not exist.');
-			if(!is_writable($cacheDir))
-				throw new Exception('Twilio: The directory '.$cacheDir.' is not writable.');
+		/**
+		 * Set the cache file to the class
+		 */
+		$this->cacheFile = $cacheFile;
 
-			/**
-			 * Get the cache filename
-			 */
-			$cacheFile = $cacheDir.'/'.preg_replace("/\D/", "", $post['From']).'_'.substr(md5($_SERVER['HTTP_HOST']), 0, 6).'.twl';
-
-			/**
-			 * Load cache is it already exists
-			 */
-			if(is_file($cacheFile) && filemtime($cacheFile) > (time() - 3600))
-				$this->cache = unserialize(e::$encryption->decrypt(base64_decode(file_get_contents($cacheFile)), $post['From']));
-			else $this->cache = array();
-
-			if(!is_array($this->cache))
-				$this->cache = array();
-
-			if(!empty($this->cache));
-				//dump($this->cache);
-
-			/**
-			 * Get Member
-			 */
-			if(empty($this->cache['Member'])) {
-				if($this->type === 'phone')
-					$member = array_shift(e::$events->twilio_call($post['From']));
-				else if($this->type === 'sms')
-					$member = array_shift(e::$events->twilio_sms($post['From']));
-
-				/**
-				 * Save member to cache
-				 */
-				if(isset($member) && method_exists($member, '__toArray'))
-					$this->cache['Member'] = $member->__toArray();
-
-			}
-
-			/**
-			 * Save all posted data to the cache
-			 */
-			if(empty($this->cache))
-				$this->cache = $post;
-			else $this->cache = e\array_merge_recursive_simple($this->cache, $post);
-			$data = base64_encode(e::$encryption->encrypt(serialize($this->cache), $post['From']));
-			file_put_contents($cacheFile, $data);
-
-			/**
-			 * Set to a LHTML Hook
-			 */
-			if($member) e::configure('lhtml')->activeAddKey('hook', ':member', $member);
-			e::configure('lhtml')->activeAddKey('hook', ':twilcache', $this->cache);
-
-			/**
-			 * Set the cache file to the class
-			 */
-			$this->cacheFile = $cacheFile;
-
-			return $this->cache;
-		//}
+		return $this->cache;
 	}
 
 	public function saveCache($var, $val = '') {
@@ -177,22 +175,24 @@ class Bundle {
 	}
 
 	public function _on_portal_route($path, $dir) {
-		try {
-			$this->twilInit();
-		}
-		catch(Exception $e) {
-			return false;
-		}
+		if(strpos($_SERVER['HTTP_USER_AGENT'], 'TwilioProxy') === 0) {
+			try {
+				$this->twilInit();
+			}
+			catch(Exception $e) {
+				return false;
+			}
 
-		/**
-		 * Start routing the request
-		 */
-		$this->route($path, array($dir));
+			/**
+			 * Start routing the request
+			 */
+			$this->route($path, array($dir));
 
-		/**
-		 * If we didnt complete since we know we are twilio throw an exception
-		 */
-		//throw new Exception('The page Twilio requested did not exist.');
+			/**
+			 * If we didnt complete since we know we are twilio throw an exception
+			 */
+			throw new Exception('The page Twilio requested did not exist.');
+		}
 	}
 
 	/*public function _on_portal_exception($path, $dir, $exception) {
