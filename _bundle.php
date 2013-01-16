@@ -19,8 +19,8 @@ class Bundle {
 	 */
 	private $ApiVersion = "2010-04-01"; 
 
-	private $AccountSid = "ACfd5b68d61d4643a99c7133fdda9bb6d1";
-	private $AuthToken = "9008a8bbe02ddd0ad68bee5094aacb04";
+	private $AccountSid = "account-id";
+	private $AuthToken = "auth-token";
 
 	public function _on_framework_loaded() {
 		/**
